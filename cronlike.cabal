@@ -19,6 +19,6 @@ library
   exposed-modules:     System.CronLike
   other-modules:       System.CronLike.Types   
 
-  build-depends:       base >=4.10 && <5, containers, time
+  build-depends:       base >=4.10 && <5, async, containers, time
   hs-source-dirs:      src
   default-language:    Haskell2010
