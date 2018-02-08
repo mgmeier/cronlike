@@ -14,7 +14,6 @@ import  Control.DeepSeq                 (deepseq)
 import  Control.Concurrent              (ThreadId, threadDelay, forkIO)
 import  Control.Monad
 import  Control.Concurrent.MVar
-import  Data.Maybe
 import  System.IO.Unsafe                (unsafePerformIO)
 
 
