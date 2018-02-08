@@ -1,5 +1,5 @@
 # Revision history for cronlike
 
-## 0.1.0.0  -- YYYY-mm-dd
+## 0.9  -- 2018-02-08
 
-* First version. Released on an unsuspecting world.
+* Alpha version. Feature copmlete, but still lacking tests and docs.

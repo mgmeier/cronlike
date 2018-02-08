@@ -13,7 +13,7 @@ Cronlike is designed:
 * not to incur any penalty wrt. performance and/or memory usage
 * to support registering and unregistering cronjobs during runtime
 * to have an unintrusive API
-* and to be general enough for all targeted use cases
+* and to provide a convenient abstraction covering all targeted use cases
 
 # API
 
@@ -22,10 +22,10 @@ TBD.
 * data types
 
 * `cronlikeRegister` - destructive insert/update of a job
-* `cronlikeUnrgister` - remove (classes of) jobs
+* `cronlikeUnrdgister` - remove (classes of) jobs
 * `cronlikeList` - list currently registered jobs
 
 # Example usage
 
-TBD - see ["here"](https://github.com/mgmeier/cronlike/blob/master/example/Main.hs)
+TBD - see [here](https://github.com/mgmeier/cronlike/blob/master/example/Main.hs)
 
