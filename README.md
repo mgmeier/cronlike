@@ -22,7 +22,7 @@ TBD.
 * data types
 
 * `cronlikeRegister` - destructive insert/update of a job
-* `cronlikeUnrdgister` - remove (classes of) jobs
+* `cronlikeUnregister` - remove (classes of) jobs
 * `cronlikeList` - list currently registered jobs
 
 # Example usage

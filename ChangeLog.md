@@ -2,4 +2,4 @@
 
 ## 0.9  -- 2018-02-08
 
-* Alpha version. Feature copmlete, but still lacking tests and docs.
+* Alpha version. Feature complete, but still lacking tests and docs.
