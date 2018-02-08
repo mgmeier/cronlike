@@ -3,65 +3,60 @@
 module System.CronLike
         ( cronlikeRegister
         , cronlikeUnregister
-        , cronlikeIsRunning
         , cronlikeList
-        , cronlikeStop
-        , cronlikeStart
         , module Types
         ) where
 
 import  System.CronLike.Types as Types
 
 import  Control.Concurrent.Async        (race)
-import  Control.Concurrent              (threadDelay, forkIO)
+import  Control.DeepSeq                 (deepseq)
+import  Control.Concurrent              (ThreadId, threadDelay, forkIO)
 import  Control.Monad
 import  Control.Concurrent.MVar
 import  Data.Maybe
 import  System.IO.Unsafe                (unsafePerformIO)
 
 
-type Command = Either String CronLikeJob
+type Command a = Either (a -> Bool) (CronLikeJob a)
 
 --- global mutables
 
--- full -> stopped; empty -> running
-gmutRunning :: MVar ()
-gmutRunning = unsafePerformIO $ newMVar ()
-{-# NOINLINE gmutRunning #-}
-
-gmutJobs :: MVar [CronLikeJob]
+-- the only producer for gmutJobs is scheduler
+gmutJobs :: MVar [CronLikeJob a]
 gmutJobs = unsafePerformIO $ newMVar []
 {-# NOINLINE gmutJobs #-}
 
-gmutControl :: MVar Command
+-- the only producers for gmutControl are cronlikeRegister / Unregister
+gmutControl :: MVar (Command a)
 gmutControl = unsafePerformIO newEmptyMVar
 {-# NOINLINE gmutControl #-}
 
 
+-- worker thread
 
-
-scheduler :: IO ()
-scheduler =
+scheduler :: ThreadId
+scheduler = unsafePerformIO $ forkIO $ forever $
     readMVar gmutJobs >>= \case
         [] -> event >>= control
-        js -> race (nextJob js) event >>= react
+        js -> race (nextJob js) event >>= either runJob control
   where
-    react = either (\j -> scheduler) control
-    event = race (takeMVar gmutRunning) (takeMVar gmutControl)
-   
-    control :: Either () Command -> IO ()
-    control Left{} = cronlikeStop
-    control (Right command) = do
-        modifyMVar_ gmutJobs (return . modify)
-        scheduler
+    event = takeMVar gmutControl 
+
+    runJob :: CronLikeJob a -> IO ()
+    runJob = void . forkIO . cjobAction
+
+    control :: Command a -> IO ()
+    control command = modifyMVar_ gmutJobs (return . modify)
       where
-        modify = either (\n -> filter ((/= n) . cjobName)) (:) command
+        -- TODO filter existing cJobId when adding
+        modify = either (\cond -> filter (not . cond . cjobId)) (:) command
 
     nextJob js = do 
         -- handle filtering out scheduled events in the past
         threadDelay (findShortestDelay js)
         return $ head js
-    
+
     findShortestDelay _ = 
         60 * 1000 * 1000
   
@@ -69,22 +64,14 @@ scheduler =
 
 -- API
 
-cronlikeRegister :: CronLikeJob -> IO ()
-cronlikeRegister = putMVar gmutControl . Right 
+-- the scheduler thread starts as soon as the first job is registered
+cronlikeRegister :: CronLikeJob a -> IO ()
+cronlikeRegister job =
+    scheduler `deepseq` putMVar gmutControl (Right job)
 
-cronlikeUnregister :: String -> IO ()
+cronlikeUnregister :: (a -> Bool) -> IO ()
 cronlikeUnregister = putMVar gmutControl . Left
 
-cronlikeList :: IO [CronLikeJob]
+cronlikeList :: IO [CronLikeJob a]
 cronlikeList = readMVar gmutJobs
 
-cronlikeIsRunning :: IO Bool
-cronlikeIsRunning = isEmptyMVar gmutRunning
-
-cronlikeStop :: IO ()
-cronlikeStop = void $ tryPutMVar gmutRunning ()
-
-cronlikeStart :: IO ()
-cronlikeStart =
-    tryTakeMVar gmutRunning >>= \res ->
-        when (isJust res) (void $ forkIO scheduler)
