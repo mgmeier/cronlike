@@ -34,6 +34,7 @@ gmutControl = unsafePerformIO newEmptyMVar
 
 -- worker thread
 
+{-# NOINLINE scheduler #-}
 scheduler :: ThreadId
 scheduler = unsafePerformIO $ forkIO $ forever $
     readMVar gmutJobs >>= \case
