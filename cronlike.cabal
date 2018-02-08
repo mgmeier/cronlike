@@ -1,17 +1,23 @@
 
 name:                cronlike
-version:             0.1.0.0
-synopsis:            Execute actions according to a schedule
+version:             0.9
+synopsis:            Execute actions based on a schedule
   -- description:         
 license:             MIT
 license-file:        LICENSE
 author:              Michael Karg
 maintainer:          mgoremeier@gmail.com
--- copyright:           
+homepage:            https://github.com/mgmeier/cronlike
+bug-reports:         https://github.com/mgmeier/cronlike/issues
 category:            System
 build-type:          Simple
 extra-source-files:  ChangeLog.md, README.md
 cabal-version:       >=1.10
+
+source-repository head
+  type:     git
+  location: https://github.com/mgmeier/cronlike.git
+
 
 library
   exposed-modules:     System.CronLike

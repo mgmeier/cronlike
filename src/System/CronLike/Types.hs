@@ -6,6 +6,8 @@ import Data.Time.LocalTime  (TimeOfDay)
 import Data.Time.Clock      (UTCTime, NominalDiffTime)
 
 
+-- TODO add some weekly schedule, like (DayOfWeek -> [TimeOfDay]) ?
+
 data CronLikeInterval
     = IntervEveryNMins  Int
     | IntervDailyAt     [TimeOfDay]
