@@ -1,4 +1,4 @@
-{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE LambdaCase, BangPatterns #-}
 
 module System.CronLike
         ( cronlikeRegister
@@ -7,22 +7,28 @@ module System.CronLike
         , module Types
         ) where
 
-import  System.CronLike.Types as Types
+import  System.CronLike.Types           as Types
 
+import  Data.Time.Clock
+import  Data.Time.LocalTime             (timeOfDayToTime)
 import  Control.Concurrent.Async        (race)
 import  Control.DeepSeq                 (deepseq)
 import  Control.Concurrent              (ThreadId, threadDelay, forkIO)
 import  Control.Monad
 import  Control.Concurrent.MVar
+import  Data.Maybe                      (mapMaybe, fromJust)
+import  Data.List                       (minimumBy)
+import  Data.Ord                        (comparing)
 import  System.IO.Unsafe                (unsafePerformIO)
 
 
 type Command a = Either (a -> Bool) (CronLikeJob a)
 
+
 --- global mutables
 
 -- the only producer for gmutJobs is scheduler
-gmutJobs :: MVar [CronLikeJob a]
+gmutJobs :: MVar [(UTCTime, CronLikeJob a)]
 gmutJobs = unsafePerformIO $ newMVar []
 {-# NOINLINE gmutJobs #-}
 
@@ -37,29 +43,60 @@ gmutControl = unsafePerformIO newEmptyMVar
 {-# NOINLINE scheduler #-}
 scheduler :: ThreadId
 scheduler = unsafePerformIO $ forkIO $ forever $
-    readMVar gmutJobs >>= \case
-        [] -> event >>= control
-        js -> race (nextJob js) event >>= either runJob control
+    readJobsCleaningUp >>= \case
+        ([], _) -> event >>= control
+        jsNow   -> race (nextJob jsNow) event >>= either runJob control
   where
     event = takeMVar gmutControl 
 
     runJob :: CronLikeJob a -> IO ()
-    runJob = void . forkIO . cjobAction
+    runJob job = do
+        now <- getCurrentTime
+        modifyMVar_ gmutJobs $
+            return . map (\j@(_, job') -> if job == job' then (now, job') else j)
+        void $ forkIO $ cjobAction job
 
     control :: Command a -> IO ()
-    control command = modifyMVar_ gmutJobs (return . modify)
+    control = modifyMVar_ gmutJobs . either rmJobs addJob
       where
-        -- TODO filter existing cJobId when adding
-        modify = either (\cond -> filter (not . cond . cjobId)) (:) command
+        rmJobs cond = return . filter (not . cond . cjobId . snd)
+        addJob job jobs = do
+            now <- getCurrentTime
+            return $ (now, job) : filter ((/= job) . snd) jobs
 
-    nextJob js = do 
-        -- handle filtering out scheduled events in the past
-        threadDelay (findShortestDelay js)
-        return $ head js
+    readJobsCleaningUp = modifyMVar gmutJobs $ \js -> do
+        now <- getCurrentTime
+        let js' = mapMaybe (filterScheduled now) js
+        return (js', (js', now))
+      where
+        filterScheduled now (lastRun, j) =
+            (\i' -> (lastRun, j {cjobInterval = i'})) <$> advance now (cjobInterval j)
 
-    findShortestDelay _ = 
-        60 * 1000 * 1000
-  
+    nextJob (js, now) = threadDelay (1000 * 1000 * round wait) >> return job
+      where
+        delayPerJob = [(fromNow now lastRun (cjobInterval j), j) | (lastRun, j) <- js]
+        (wait, job) = minimumBy (comparing fst) delayPerJob
+
+
+
+-- helper functions 
+
+fromNow :: UTCTime -> UTCTime -> CronLikeInterval -> NominalDiffTime
+fromNow now@(UTCTime day tod) lastRun = \case
+    IntervScheduled t _ -> t `diffUTCTime` now
+    IntervEveryNMins n  -> fromIntegral (60 * n) `addUTCTime` lastRun `diffUTCTime` now
+    IntervDailyAt is    -> minimum [next `diffUTCTime` now | next <- map (nextDaily . timeOfDayToTime) is]
+  where
+    nextDaily target    = UTCTime (if target < tod then succ day else day) target
+
+advance :: UTCTime -> CronLikeInterval -> Maybe CronLikeInterval
+advance now = \case
+    i@(IntervScheduled t Nothing)   -> if t < now then Nothing else Just i
+    i@(IntervScheduled t d)         -> Just $ if t < now then IntervScheduled (go (fromJust d) t) d else i
+    i                               -> Just i
+  where
+    go !diff !t = let t' = diff `addUTCTime` t in if t' < now then go diff t' else t'
+
 
 
 -- API
@@ -73,5 +110,5 @@ cronlikeUnregister :: (a -> Bool) -> IO ()
 cronlikeUnregister = putMVar gmutControl . Left
 
 cronlikeList :: IO [CronLikeJob a]
-cronlikeList = readMVar gmutJobs
+cronlikeList = map snd <$> readMVar gmutJobs
 
